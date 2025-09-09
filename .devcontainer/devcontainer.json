@@ -1,0 +1,24 @@
+{
+  "workspaceFolder": "/workspace",
+  "name": "RestaurantCRM DevContainer",
+    "dockerComposeFile": [
+      "docker-compose.yml"
+    ],
+    "service": "app",
+  "postCreateCommand": "npm install",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "dbaeumer.vscode-eslint",
+        "esbenp.prettier-vscode"
+      ]
+    }
+  },
+  "forwardPorts": [3000, 5173, 5432],
+  "mounts": [
+    "source=${localWorkspaceFolder}/node_modules,target=/workspace/node_modules,type=volume"
+  ],
+  "features": {
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {}
+  }
+}

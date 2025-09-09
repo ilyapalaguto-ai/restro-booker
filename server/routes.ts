@@ -86,6 +86,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (error instanceof ZodError) {
         return res.status(400).json({ message: 'Invalid input data', errors: error.errors });
       }
+      console.error('[auth.login] unexpected error', error);
       res.status(500).json({ message: 'Internal server error' });
     }
   });

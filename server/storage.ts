@@ -5,13 +5,14 @@ import {
   type BookingWithDetails, type TableWithBookings, type RestaurantWithTables
 } from "@shared/schema";
 import { db } from "./db";
-import { eq, and, gte, lte, desc, asc, count, sum } from "drizzle-orm";
+import { eq, and, gte, lte, desc, count, sum, sql } from "drizzle-orm";
 import bcrypt from "bcrypt";
 
 export interface IStorage {
   // Users
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
+  getUsers(): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
@@ -78,6 +79,10 @@ export class DatabaseStorage implements IStorage {
   async getUserByEmail(email: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.email, email));
     return user || undefined;
+  }
+
+  async getUsers(): Promise<User[]> {
+    return db.select().from(users);
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
@@ -233,7 +238,7 @@ export class DatabaseStorage implements IStorage {
 
   // Bookings
   async getBookings(restaurantId?: string, date?: Date): Promise<BookingWithDetails[]> {
-    let query = db.select({
+    const base = db.select({
       id: bookings.id,
       restaurantId: bookings.restaurantId,
       tableId: bookings.tableId,
@@ -253,30 +258,28 @@ export class DatabaseStorage implements IStorage {
       table: tables,
       restaurant: restaurants,
       user: users,
-    })
-    .from(bookings)
-    .leftJoin(customers, eq(bookings.customerId, customers.id))
-    .leftJoin(tables, eq(bookings.tableId, tables.id))
-    .leftJoin(restaurants, eq(bookings.restaurantId, restaurants.id))
-    .leftJoin(users, eq(bookings.userId, users.id));
+    }).from(bookings)
+      .leftJoin(customers, eq(bookings.customerId, customers.id))
+      .leftJoin(tables, eq(bookings.tableId, tables.id))
+      .leftJoin(restaurants, eq(bookings.restaurantId, restaurants.id))
+      .leftJoin(users, eq(bookings.userId, users.id));
 
+    const whereClauses = [] as any[];
     if (restaurantId) {
-      query = query.where(eq(bookings.restaurantId, restaurantId));
+      whereClauses.push(eq(bookings.restaurantId, restaurantId));
     }
-
     if (date) {
       const startOfDay = new Date(date);
       startOfDay.setHours(0, 0, 0, 0);
       const endOfDay = new Date(date);
       endOfDay.setHours(23, 59, 59, 999);
-      
-      query = query.where(and(
-        gte(bookings.startTime, startOfDay),
-        lte(bookings.startTime, endOfDay)
-      ));
+      whereClauses.push(and(gte(bookings.startTime, startOfDay), lte(bookings.startTime, endOfDay)));
     }
 
-    const results = await query.orderBy(desc(bookings.createdAt));
+    const results = await (whereClauses.length
+      ? base.where(and(...whereClauses))
+      : base)
+      .orderBy(desc(bookings.createdAt));
     
     return results.map(result => ({
       ...result,
@@ -371,10 +374,9 @@ export class DatabaseStorage implements IStorage {
       .returning();
 
     // Update customer's total bookings and last visit
-    await db
-      .update(customers)
+    await db.update(customers)
       .set({
-        totalBookings: customers.totalBookings + 1,
+        totalBookings: sql`${customers.totalBookings} + 1`,
         lastVisit: new Date(),
         updatedAt: new Date(),
       })
@@ -434,7 +436,7 @@ export class DatabaseStorage implements IStorage {
       totalBookings: stats.totalBookings || 0,
       totalRevenue: Number(stats.totalRevenue) || 0,
       averagePartySize: stats.totalBookings > 0 
-        ? Math.round((stats.averagePartySize || 0) / stats.totalBookings)
+        ? Math.round((Number(stats.averagePartySize) || 0) / stats.totalBookings)
         : 0,
       occupancyRate,
     };
