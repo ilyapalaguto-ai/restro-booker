@@ -9,7 +9,7 @@ const JIRA_BASE_URL = process.env.JIRA_BASE_URL?.replace(/\/$/, '') || '';
 const JIRA_EMAIL = process.env.JIRA_EMAIL || '';
 const JIRA_API_TOKEN = process.env.JIRA_API_TOKEN || '';
 const JIRA_PROJECT_KEY = process.env.JIRA_PROJECT_KEY || '';
-const JIRA_EPIC_NAME_FIELD = process.env.JIRA_EPIC_NAME_FIELD; // e.g. customfield_10011
+let JIRA_EPIC_NAME_FIELD = process.env.JIRA_EPIC_NAME_FIELD; // e.g. customfield_10011 (can be auto-detected)
 const UPDATE_MODE = (process.env.JIRA_UPDATE_MODE || 'update').toLowerCase();
 
 if (!JIRA_BASE_URL || !JIRA_EMAIL || !JIRA_API_TOKEN || !JIRA_PROJECT_KEY) {
@@ -96,6 +96,23 @@ function buildDescriptionMarkdown(pf: ParsedFile) {
   return cleaned;
 }
 
+async function detectEpicNameField(): Promise<string | undefined> {
+  if (JIRA_EPIC_NAME_FIELD) return JIRA_EPIC_NAME_FIELD;
+  try {
+    const fields: any[] = await jiraRequest('/field', { method: 'GET' });
+    const epicField = fields.find(f => /epic name/i.test(f.name || ''));
+    if (epicField && epicField.id) {
+      JIRA_EPIC_NAME_FIELD = epicField.id;
+      console.log(`[jira-sync] Auto-detected Epic Name field: ${JIRA_EPIC_NAME_FIELD}`);
+      return JIRA_EPIC_NAME_FIELD;
+    }
+    console.warn('[jira-sync] Epic Name field not found during auto-detect. Provide JIRA_EPIC_NAME_FIELD env var if epics fail to create.');
+  } catch (e:any) {
+    console.warn('[jira-sync] Failed to auto-detect Epic Name field', e.message);
+  }
+  return undefined;
+}
+
 async function createIssue(pf: ParsedFile) {
   const description = buildDescriptionMarkdown(pf);
   const fields: any = {
@@ -104,8 +121,13 @@ async function createIssue(pf: ParsedFile) {
     issuetype: { name: pf.issueType },
     description
   };
-  if (pf.issueType === 'Epic' && JIRA_EPIC_NAME_FIELD) {
-    fields[JIRA_EPIC_NAME_FIELD] = pf.summary; // Epic Name
+  if (pf.issueType === 'Epic') {
+    if (!JIRA_EPIC_NAME_FIELD) {
+      await detectEpicNameField();
+    }
+    if (JIRA_EPIC_NAME_FIELD) {
+      fields[JIRA_EPIC_NAME_FIELD] = pf.summary; // Epic Name
+    }
   }
   const result = await jiraRequest('/issue', { method: 'POST', body: JSON.stringify({ fields }) });
   return result; // contains key, id
@@ -117,8 +139,13 @@ async function updateIssue(key: string, pf: ParsedFile) {
     summary: pf.summary,
     description
   };
-  if (pf.issueType === 'Epic' && JIRA_EPIC_NAME_FIELD) {
-    fields[JIRA_EPIC_NAME_FIELD] = pf.summary;
+  if (pf.issueType === 'Epic') {
+    if (!JIRA_EPIC_NAME_FIELD) {
+      await detectEpicNameField();
+    }
+    if (JIRA_EPIC_NAME_FIELD) {
+      fields[JIRA_EPIC_NAME_FIELD] = pf.summary;
+    }
   }
   await jiraRequest(`/issue/${key}`, { method: 'PUT', body: JSON.stringify({ fields }) });
 }
