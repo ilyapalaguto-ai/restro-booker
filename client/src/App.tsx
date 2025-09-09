@@ -6,6 +6,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider, useAuth } from "@/hooks/use-auth";
 import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
+import Register from "@/pages/register";
 import AdminDashboard from "@/pages/admin-dashboard";
 import RestaurantDashboard from "@/pages/restaurant-dashboard";
 import CustomerApp from "@/pages/customer-app";
@@ -45,6 +46,7 @@ function Router() {
   return (
     <Switch>
       <Route path="/login" component={Login} />
+  <Route path="/register" component={Register} />
       
       <Route path="/admin">
         <ProtectedRoute allowedRoles={['admin']}>

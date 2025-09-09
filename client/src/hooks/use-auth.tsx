@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 interface AuthContextType {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
+  register: (data: { email: string; password: string; confirmPassword: string; firstName: string; lastName: string; phone?: string; role?: string; }) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
 }
@@ -53,13 +54,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const register = async (data: { email: string; password: string; confirmPassword: string; firstName: string; lastName: string; phone?: string; role?: string; }) => {
+    try {
+      const response = await apiRequest('POST', '/api/auth/register', data);
+      const resData = await response.json();
+      setAuthToken(resData.token);
+      setUser(resData.user);
+    } catch (error) {
+      throw error;
+    }
+  };
+
   const logout = () => {
     removeAuthToken();
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, isLoading }}>
+    <AuthContext.Provider value={{ user, login, register, logout, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
