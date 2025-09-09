@@ -46,6 +46,8 @@ const JIRA_HEADERS: Record<string,string> = {
   'Accept': 'application/json',
   'Content-Type': 'application/json'
 };
+const ISSUE_TYPE_OVERRIDE_STORY = process.env.JIRA_ISSUETYPE_STORY; // optional mapping e.g. User Story
+const ISSUE_TYPE_OVERRIDE_TASK = process.env.JIRA_ISSUETYPE_TASK; // optional mapping
 
 interface ParsedFile {
   filePath: string;
@@ -114,7 +116,7 @@ async function jiraRequest(pathPart: string, init: RequestInit): Promise<any> {
   const res = await fetch(`${JIRA_API_BASE}${pathPart}`, { ...init, headers: { ...JIRA_HEADERS, ...(init.headers||{}) } });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Jira API ${res.status} ${res.statusText}: ${text}`);
+  throw new Error(`Jira API ${res.status} ${res.statusText}: ${text}`);
   }
   if (res.status === 204) return null;
   return res.json();
@@ -157,7 +159,7 @@ async function createIssue(pf: ParsedFile) {
   const fields: any = {
     summary: pf.summary,
     project: { key: JIRA_PROJECT_KEY },
-    issuetype: { name: pf.issueType },
+  issuetype: { name: mapIssueTypeName(pf.issueType) },
     description
   };
   if (pf.issueType === 'Epic') {
@@ -176,7 +178,7 @@ async function updateIssue(key: string, pf: ParsedFile) {
   const description = buildDescriptionMarkdown(pf);
   const fields: any = {
     summary: pf.summary,
-    description
+  description
   };
   if (pf.issueType === 'Epic') {
     if (!JIRA_EPIC_NAME_FIELD) {
@@ -210,6 +212,37 @@ function ensureJiraLinkInFile(pf: ParsedFile, jiraKey: string) {
   console.log(`[jira-sync] Updated file with JIRA link ${jiraKey}`);
 }
 
+let projectValidated = false;
+let availableIssueTypes: string[] = [];
+async function validateProjectAndTypes() {
+  if (projectValidated) return;
+  try {
+    const project = await jiraRequest(`/project/${JIRA_PROJECT_KEY}`, { method: 'GET' });
+    const types = project.issueTypes || [];
+    availableIssueTypes = types.map((t: any) => t.name).filter(Boolean);
+    console.log(`[jira-sync] Project '${JIRA_PROJECT_KEY}' OK. Issue types: ${availableIssueTypes.join(', ')}`);
+    projectValidated = true;
+  } catch (e:any) {
+    console.error(`[jira-sync] Project validation failed for key '${JIRA_PROJECT_KEY}'. Verify it exists and you have permissions.`);
+    console.error(e.message);
+  }
+}
+
+function mapIssueTypeName(t: 'Epic' | 'Story' | 'Task'): string {
+  // Allow user overrides
+  if (t === 'Story' && ISSUE_TYPE_OVERRIDE_STORY) return ISSUE_TYPE_OVERRIDE_STORY;
+  if (t === 'Task' && ISSUE_TYPE_OVERRIDE_TASK) return ISSUE_TYPE_OVERRIDE_TASK;
+  // If the desired type not in available list after validation, fallback heuristics
+  if (availableIssueTypes.length) {
+    if (!availableIssueTypes.includes(t)) {
+      if (t === 'Story' && availableIssueTypes.includes('User Story')) return 'User Story';
+      if (t === 'Story' && availableIssueTypes.includes('Task')) return 'Task';
+      if (t === 'Task' && availableIssueTypes.includes('Story')) return 'Story';
+    }
+  }
+  return t;
+}
+
 const queue: (() => Promise<void>)[] = [];
 let working = false;
 function enqueue(fn: () => Promise<void>) {
@@ -233,6 +266,11 @@ async function handleFile(filePath: string) {
   const pf = parseFile(filePath);
   if (!pf) return;
   try {
+    await validateProjectAndTypes();
+    if (!projectValidated) {
+      console.warn('[jira-sync] Skipping because project not validated.');
+      return;
+    }
     if (pf.jiraKey) {
       if (UPDATE_MODE === 'skip') {
         console.log(`[jira-sync] Skip update ${pf.jiraKey}`);
