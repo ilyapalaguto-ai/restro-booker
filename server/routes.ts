@@ -11,7 +11,7 @@ import {
   insertBookingSchema,
   type User 
 } from "@shared/schema";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 
 const JWT_SECRET = process.env.JWT_SECRET || 'default-secret-key';
 
@@ -453,10 +453,102 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // User management routes (admin only)
   app.get("/api/users", authenticateToken, requireRole(['admin']), async (req, res) => {
     try {
-      const users = await storage.getUsers?.() || [];
+      const role = (req.query.role as string | undefined)?.trim();
+      let users = [] as any[];
+      if (role) {
+        users = await storage.getUsersByRole(role);
+        return res.json(users.map(({ password, ...u }) => u));
+      }
+      users = await storage.getUsers();
       const usersWithoutPasswords = users.map(({ password, ...user }) => user);
       res.json(usersWithoutPasswords);
     } catch (error) {
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+  
+  // Create user (admin only)
+  app.post("/api/users", authenticateToken, requireRole(['admin']), async (req, res) => {
+    try {
+      const createUserSchema = z.object({
+        email: z.string().email(),
+        phone: z.string().regex(/^[0-9+()\-\s]{5,20}$/i, 'Invalid phone').optional(),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        role: z.enum(['admin','restaurant_manager','customer']).default('customer'),
+        isActive: z.boolean().optional().default(true),
+        restaurantId: z.string().min(1).optional().or(z.null()),
+        password: z.string().min(6),
+      }).strict();
+
+      const data = createUserSchema.parse(req.body);
+
+      // Normalize empty restaurantId
+      if ((data as any).restaurantId === "") {
+        (data as any).restaurantId = null;
+      }
+
+      // Check uniqueness
+      const existing = await storage.getUserByEmail(data.email);
+      if (existing) {
+        return res.status(400).json({ message: 'Email already in use' });
+      }
+
+      const user = await storage.createUser(data as any);
+      const { password: _pw, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: 'Invalid input data', errors: error.errors });
+      }
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
+
+  // Update user (admin only) - for assigning managers to restaurants, etc.
+  app.put("/api/users/:id", authenticateToken, requireRole(['admin']), async (req, res) => {
+    try {
+      const updateUserSchema = z.object({
+        email: z.string().email().optional(),
+        phone: z.string().regex(/^[0-9+()\-\s]{5,20}$/i, 'Invalid phone').optional(),
+        firstName: z.string().min(1).optional(),
+        lastName: z.string().min(1).optional(),
+        role: z.enum(['admin','restaurant_manager','customer']).optional(),
+        isActive: z.boolean().optional(),
+        restaurantId: z.string().min(1).optional().or(z.null()),
+        password: z.string().min(6).optional(),
+      }).strict();
+
+      const parsed = updateUserSchema.parse(req.body);
+
+      // Normalize empty string restaurantId to null
+      if (parsed.restaurantId === "") {
+        (parsed as any).restaurantId = null;
+      }
+
+      // Trim & normalize phone
+      if (parsed.phone) {
+        (parsed as any).phone = parsed.phone.trim();
+      }
+
+      // Ensure email uniqueness if updating
+      if (parsed.email) {
+        const existing = await storage.getUserByEmail(parsed.email);
+        if (existing && existing.id !== req.params.id) {
+          return res.status(400).json({ message: 'Email already in use' });
+        }
+      }
+
+      const user = await storage.getUser(req.params.id);
+      if (!user) return res.status(404).json({ message: 'User not found' });
+
+      const updated = await storage.updateUser(req.params.id, parsed);
+      const { password: _pw, ...userWithoutPassword } = updated;
+      res.json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: 'Invalid input data', errors: error.errors });
+      }
       res.status(500).json({ message: 'Internal server error' });
     }
   });

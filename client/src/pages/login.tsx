@@ -87,6 +87,9 @@ export default function Login() {
               {isLoading ? "Вход..." : "Войти"}
             </Button>
           </form>
+          <p className="text-sm text-center text-muted-foreground mt-4">
+            Нет аккаунта? <a href="/register" className="text-primary underline">Зарегистрироваться</a>
+          </p>
           
           <div className="mt-6 pt-6 border-t border-border">
             <p className="text-sm text-muted-foreground text-center mb-4">
