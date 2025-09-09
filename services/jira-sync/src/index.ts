@@ -3,7 +3,30 @@ import path from 'path';
 import chokidar from 'chokidar';
 import dotenv from 'dotenv';
 
-dotenv.config();
+// Enhanced env loading: try local .env, then look for .env.jira in parent directories
+function loadEnv() {
+  const tried: string[] = [];
+  const cwd = process.cwd();
+  const candidateFiles = [
+    path.join(cwd, '.env'),
+    path.join(cwd, '.env.local'),
+    path.join(cwd, '.env.jira'),
+    path.join(cwd, '..', '.env.jira'),
+    path.join(cwd, '..', '..', '.env.jira')
+  ];
+  for (const file of candidateFiles) {
+    if (fs.existsSync(file)) {
+      dotenv.config({ path: file });
+      console.log(`[jira-sync] Loaded env file: ${path.relative(cwd, file)}`);
+      return;
+    }
+    tried.push(file);
+  }
+  dotenv.config(); // fallback default
+  console.warn('[jira-sync] No explicit .env / .env.jira found. Tried:', tried.map(f=>path.relative(cwd,f)).join(', '));
+}
+
+loadEnv();
 
 const JIRA_BASE_URL = process.env.JIRA_BASE_URL?.replace(/\/$/, '') || '';
 const JIRA_EMAIL = process.env.JIRA_EMAIL || '';
@@ -33,8 +56,24 @@ interface ParsedFile {
   content: string;
 }
 
-const rootDir = process.cwd();
+function findRepoRoot(start: string) {
+  let dir = start;
+  let prev = '';
+  while (dir !== prev) {
+    if (fs.existsSync(path.join(dir, '.jira'))) return dir;
+    prev = dir;
+    dir = path.dirname(dir);
+  }
+  return start; // fallback
+}
+
+const serviceCwd = process.cwd();
+const rootDir = findRepoRoot(serviceCwd);
 const jiraDir = path.join(rootDir, '.jira');
+if (!fs.existsSync(jiraDir)) {
+  console.warn('[jira-sync] .jira directory not found at resolved root:', rootDir);
+}
+console.log('[jira-sync] Repo root resolved to', rootDir);
 
 function detectIssueType(p: string, firstLine: string): ParsedFile['issueType'] {
   if (p.includes('/epics/')) return 'Epic';
