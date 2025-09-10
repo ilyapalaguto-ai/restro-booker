@@ -1,7 +1,7 @@
 # USER STORY: Статистика ресторана
 Key: USER-STORY-1008  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1008  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-13
 Repo: ./user-stories/USER-STORY-1008.md
 
 ## Как

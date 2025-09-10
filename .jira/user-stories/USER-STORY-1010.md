@@ -1,7 +1,7 @@
 # USER STORY: Унифицированный формат ошибок
 Key: USER-STORY-1010  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1010  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-15
 Repo: ./user-stories/USER-STORY-1010.md
 
 ## Как

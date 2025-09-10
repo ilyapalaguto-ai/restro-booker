@@ -1,7 +1,7 @@
 # USER STORY: Логин
 Key: USER-STORY-1002  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1002  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-7
 Repo: ./user-stories/USER-STORY-1002.md
 
 ## Как

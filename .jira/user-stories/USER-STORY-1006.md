@@ -1,7 +1,7 @@
 # USER STORY: Создание брони
 Key: USER-STORY-1006  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1006  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-11
 Repo: ./user-stories/USER-STORY-1006.md
 
 ## Как

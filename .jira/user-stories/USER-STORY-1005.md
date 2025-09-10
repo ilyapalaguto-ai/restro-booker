@@ -1,7 +1,7 @@
 # USER STORY: Управление столами
 Key: USER-STORY-1005  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1005  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-10
 Repo: ./user-stories/USER-STORY-1005.md
 
 ## Как

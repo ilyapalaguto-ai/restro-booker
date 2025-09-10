@@ -1,7 +1,7 @@
 # USER STORY: Refresh токены
 Key: USER-STORY-1011  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1011  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-16
 Repo: ./user-stories/USER-STORY-1011.md
 
 ## Как

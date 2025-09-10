@@ -1,7 +1,7 @@
 # USER STORY: Регистрация пользователя
 Key: USER-STORY-1001  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1001  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-6
 Repo: ./user-stories/USER-STORY-1001.md
 
 ## Как

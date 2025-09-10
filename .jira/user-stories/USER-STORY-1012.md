@@ -1,7 +1,7 @@
 # USER STORY: Авто-привязка customer к брони
 Key: USER-STORY-1012  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1012  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-17
 Repo: ./user-stories/USER-STORY-1012.md
 
 ## Как

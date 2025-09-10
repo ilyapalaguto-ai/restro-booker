@@ -1,7 +1,7 @@
 # USER STORY: Просмотр своих бронирований (Customer)
 Key: USER-STORY-1007  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1007  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-12
 Repo: ./user-stories/USER-STORY-1007.md
 
 ## Как

@@ -1,7 +1,7 @@
 # USER STORY: Role-Based Access
 Key: USER-STORY-1003  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1003  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-8
 Repo: ./user-stories/USER-STORY-1003.md
 
 ## Как

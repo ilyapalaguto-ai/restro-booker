@@ -1,7 +1,7 @@
 # USER STORY: Управление пользователями (Admin)
 Key: USER-STORY-1009  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1009  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-14
 Repo: ./user-stories/USER-STORY-1009.md
 
 ## Как

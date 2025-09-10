@@ -1,7 +1,7 @@
 # USER STORY: Управление ресторанами (Admin)
 Key: USER-STORY-1004  
 Epic: EPIC-1001  
-JIRA: https://ilyapalaguto.atlassian.net/browse/USER-STORY-1004  
+JIRA: https://ilyapalaguto.atlassian.net/browse/SCRUM-9
 Repo: ./user-stories/USER-STORY-1004.md
 
 ## Как

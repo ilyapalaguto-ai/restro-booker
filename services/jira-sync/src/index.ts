@@ -131,61 +131,152 @@ async function fetchIssue(key: string) {
   }
 }
 
-function buildDescriptionMarkdown(pf: ParsedFile) {
-  // remove any JIRA: line if present to avoid duplication inside description
-  const cleaned = pf.content.split(/\r?\n/).filter(l => !/^JIRA:\s*/i.test(l)).join('\n');
-  return cleaned;
+// Convert our markdown-ish file content into Atlassian Document Format (ADF)
+// Minimal implementation: paragraphs + bullet lists. Jira requires an object not a plain string.
+function buildDescriptionADF(pf: ParsedFile) {
+  const lines = pf.content.split(/\r?\n/)
+    .filter(l => !/^JIRA:\s*/i.test(l)); // drop existing JIRA link line
+
+  const blocks: any[] = [];
+  let paragraph: string[] = [];
+
+  function flushParagraph() {
+    if (!paragraph.length) return;
+    const text = paragraph.join(' ');
+    blocks.push({
+      type: 'paragraph',
+      content: text ? [{ type: 'text', text }] : []
+    });
+    paragraph = [];
+  }
+
+  let listMode: 'bullet' | null = null;
+  let listItems: any[] = [];
+  function flushList() {
+    if (listMode && listItems.length) {
+      blocks.push({ type: 'bulletList', content: listItems });
+    }
+    listMode = null;
+    listItems = [];
+  }
+
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (!line.trim()) { // blank line
+      flushParagraph();
+      flushList();
+      continue;
+    }
+    const bulletMatch = /^[-*+]\s+(.*)/.exec(line);
+    if (bulletMatch) {
+      flushParagraph();
+      if (!listMode) listMode = 'bullet';
+      listItems.push({ type: 'listItem', content: [{ type: 'paragraph', content: [{ type: 'text', text: bulletMatch[1] }] }] });
+      continue;
+    }
+    // headings (# ...) -> treat as heading node
+    const headingMatch = /^(#{1,6})\s+(.*)/.exec(line);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push({ type: 'heading', attrs: { level: headingMatch[1].length }, content: [{ type: 'text', text: headingMatch[2].trim() }] });
+      continue;
+    }
+    paragraph.push(line.trim());
+  }
+  flushParagraph();
+  flushList();
+
+  return {
+    type: 'doc',
+    version: 1,
+    content: blocks.length ? blocks : [{ type: 'paragraph', content: [{ type: 'text', text: pf.summary }] }]
+  };
+}
+
+// Cache for create meta lookups to avoid repeated calls
+let createMetaCache: any | null = null;
+async function loadCreateMeta() {
+  if (createMetaCache) return createMetaCache;
+  try {
+    createMetaCache = await jiraRequest(`/issue/createmeta?projectKeys=${encodeURIComponent(JIRA_PROJECT_KEY)}&expand=projects.issuetypes.fields`, { method: 'GET' });
+  } catch (e:any) {
+    console.warn('[jira-sync] Failed to load create meta', e.message);
+    createMetaCache = {};
+  }
+  return createMetaCache;
 }
 
 async function detectEpicNameField(): Promise<string | undefined> {
   if (JIRA_EPIC_NAME_FIELD) return JIRA_EPIC_NAME_FIELD;
+  const meta = await loadCreateMeta();
   try {
-    const fields: any[] = await jiraRequest('/field', { method: 'GET' });
-    const epicField = fields.find(f => /epic name/i.test(f.name || ''));
-    if (epicField && epicField.id) {
-      JIRA_EPIC_NAME_FIELD = epicField.id;
-      console.log(`[jira-sync] Auto-detected Epic Name field: ${JIRA_EPIC_NAME_FIELD}`);
-      return JIRA_EPIC_NAME_FIELD;
+    const project = meta.projects?.find((p: any) => p.key === JIRA_PROJECT_KEY) || meta.projects?.[0];
+    if (!project) return undefined;
+    // Try both English and localized Epic names to find matching issue type in meta
+    const epicIssueTypeNameCandidates = ['Epic', 'Эпик'];
+    const epicType = project.issuetypes?.find((it: any) => epicIssueTypeNameCandidates.includes(it.name));
+    if (!epicType) return undefined;
+    const fields = epicType.fields || {};
+    for (const fid of Object.keys(fields)) {
+      const f = fields[fid];
+      if (/epic name/i.test(f.name || '') || /эпик/i.test(f.name || '')) {
+        JIRA_EPIC_NAME_FIELD = fid;
+        console.log(`[jira-sync] Auto-detected Epic Name field via create meta: ${JIRA_EPIC_NAME_FIELD}`);
+        return JIRA_EPIC_NAME_FIELD;
+      }
     }
-    console.warn('[jira-sync] Epic Name field not found during auto-detect. Provide JIRA_EPIC_NAME_FIELD env var if epics fail to create.');
   } catch (e:any) {
-    console.warn('[jira-sync] Failed to auto-detect Epic Name field', e.message);
+    console.warn('[jira-sync] Epic Name detection via create meta failed', e.message);
   }
   return undefined;
 }
 
 async function createIssue(pf: ParsedFile) {
-  const description = buildDescriptionMarkdown(pf);
   const fields: any = {
     summary: pf.summary,
     project: { key: JIRA_PROJECT_KEY },
-  issuetype: { name: mapIssueTypeName(pf.issueType) },
-    description
+    issuetype: { name: mapIssueTypeName(pf.issueType) },
+    description: buildDescriptionADF(pf)
   };
   if (pf.issueType === 'Epic') {
-    if (!JIRA_EPIC_NAME_FIELD) {
-      await detectEpicNameField();
-    }
+    if (!JIRA_EPIC_NAME_FIELD) await detectEpicNameField();
+    // Revalidate that detected field is actually present in create meta for Epic
     if (JIRA_EPIC_NAME_FIELD) {
-      fields[JIRA_EPIC_NAME_FIELD] = pf.summary; // Epic Name
+      const meta = await loadCreateMeta();
+      const project = meta.projects?.find((p: any) => p.key === JIRA_PROJECT_KEY) || meta.projects?.[0];
+      const epicIssueTypeNameCandidates = ['Epic', 'Эпик'];
+      const epicType = project?.issuetypes?.find((it: any) => epicIssueTypeNameCandidates.includes(it.name));
+      const allowedFieldIds = epicType ? Object.keys(epicType.fields || {}) : [];
+      if (allowedFieldIds.includes(JIRA_EPIC_NAME_FIELD)) {
+        fields[JIRA_EPIC_NAME_FIELD] = pf.summary;
+      } else {
+        console.warn(`[jira-sync] Skipping Epic Name field '${JIRA_EPIC_NAME_FIELD}' not present on create screen`);
+      }
     }
   }
   const result = await jiraRequest('/issue', { method: 'POST', body: JSON.stringify({ fields }) });
-  return result; // contains key, id
+  return result;
 }
 
 async function updateIssue(key: string, pf: ParsedFile) {
-  const description = buildDescriptionMarkdown(pf);
   const fields: any = {
     summary: pf.summary,
-  description
+    description: buildDescriptionADF(pf)
   };
   if (pf.issueType === 'Epic') {
-    if (!JIRA_EPIC_NAME_FIELD) {
-      await detectEpicNameField();
-    }
+    if (!JIRA_EPIC_NAME_FIELD) await detectEpicNameField();
     if (JIRA_EPIC_NAME_FIELD) {
-      fields[JIRA_EPIC_NAME_FIELD] = pf.summary;
+      const meta = await loadCreateMeta();
+      const project = meta.projects?.find((p: any) => p.key === JIRA_PROJECT_KEY) || meta.projects?.[0];
+      const epicIssueTypeNameCandidates = ['Epic', 'Эпик'];
+      const epicType = project?.issuetypes?.find((it: any) => epicIssueTypeNameCandidates.includes(it.name));
+      const allowedFieldIds = epicType ? Object.keys(epicType.fields || {}) : [];
+      if (allowedFieldIds.includes(JIRA_EPIC_NAME_FIELD)) {
+        fields[JIRA_EPIC_NAME_FIELD] = pf.summary;
+      } else {
+        console.warn(`[jira-sync] Skipping Epic Name field '${JIRA_EPIC_NAME_FIELD}' on update (not on screen)`);
+      }
     }
   }
   await jiraRequest(`/issue/${key}`, { method: 'PUT', body: JSON.stringify({ fields }) });
@@ -229,18 +320,28 @@ async function validateProjectAndTypes() {
 }
 
 function mapIssueTypeName(t: 'Epic' | 'Story' | 'Task'): string {
-  // Allow user overrides
+  // User overrides first
   if (t === 'Story' && ISSUE_TYPE_OVERRIDE_STORY) return ISSUE_TYPE_OVERRIDE_STORY;
   if (t === 'Task' && ISSUE_TYPE_OVERRIDE_TASK) return ISSUE_TYPE_OVERRIDE_TASK;
-  // If the desired type not in available list after validation, fallback heuristics
+
+  const localized: Record<string, string[]> = {
+    Epic: ['Epic', 'Эпик'],
+    Story: ['Story', 'User Story', 'История'],
+    Task: ['Task', 'Задача']
+  };
+  const candidates = localized[t];
   if (availableIssueTypes.length) {
-    if (!availableIssueTypes.includes(t)) {
-      if (t === 'Story' && availableIssueTypes.includes('User Story')) return 'User Story';
-      if (t === 'Story' && availableIssueTypes.includes('Task')) return 'Task';
-      if (t === 'Task' && availableIssueTypes.includes('Story')) return 'Story';
+    // Direct match first
+    for (const c of candidates) if (availableIssueTypes.includes(c)) return c;
+    // Cross-fallbacks between Story/Task if neither localized variant found
+    if (t === 'Story') {
+      if (availableIssueTypes.includes('Task')) return 'Task';
+    } else if (t === 'Task') {
+      if (availableIssueTypes.includes('Story')) return 'Story';
+      if (availableIssueTypes.includes('User Story')) return 'User Story';
     }
   }
-  return t;
+  return candidates[0]; // default to primary canonical name
 }
 
 const queue: (() => Promise<void>)[] = [];
