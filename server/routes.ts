@@ -4,7 +4,7 @@ import jwt from "jsonwebtoken";
 import { storage } from "./storage";
 import { 
   loginSchema, 
-  registerSchema, 
+  registerSchemaWithConfirm as registerSchema, 
   insertRestaurantSchema,
   insertTableSchema,
   insertCustomerSchema,
@@ -94,14 +94,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/register", async (req, res) => {
     try {
       const data = registerSchema.parse(req.body);
-      const { confirmPassword, ...userData } = data;
+      const { confirmPassword, ...rest } = data;
 
-      const existingUser = await storage.getUserByEmail(userData.email);
+      const existingUser = await storage.getUserByEmail(rest.email);
       if (existingUser) {
         return res.status(400).json({ message: 'User already exists' });
       }
 
-      const user = await storage.createUser(userData);
+      // Enforce safe defaults and role
+      const user = await storage.createUser({
+        email: rest.email,
+        password: rest.password,
+        firstName: rest.firstName ?? "",
+        lastName: rest.lastName ?? "",
+        // role omitted -> DB default 'customer' is applied
+      } as any);
       const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '24h' });
       
       const { password: _, ...userWithoutPassword } = user;

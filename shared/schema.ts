@@ -176,12 +176,29 @@ export const loginSchema = z.object({
   password: z.string().min(6),
 });
 
-export const registerSchema = insertUserSchema.extend({
+// Public registration: minimal fields with strong password rules
+// Notes:
+// - role is NOT trusted from client; server sets 'customer' explicitly
+// - firstName/lastName are optional; server may default to empty strings
+export const registerSchema = z.object({
+  email: z.string().email(),
+  password: z
+    .string()
+    .min(8, { message: "Password must be at least 8 characters" })
+    .regex(/\d/, { message: "Password must contain at least one digit" }),
   confirmPassword: z.string(),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "Passwords don't match",
-  path: ["confirmPassword"],
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
 });
+
+// Ensure password confirmation matches
+export const registerSchemaWithConfirm = registerSchema.refine(
+  (data) => data.password === data.confirmPassword,
+  {
+    message: "Passwords don't match",
+    path: ["confirmPassword"],
+  }
+);
 
 // Types
 export type User = typeof users.$inferSelect;
