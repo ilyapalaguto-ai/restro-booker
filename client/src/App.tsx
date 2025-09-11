@@ -8,6 +8,7 @@ import NotFound from "@/pages/not-found";
 import Login from "@/pages/login";
 import Register from "@/pages/register";
 import AdminDashboard from "@/pages/admin-dashboard";
+import AdminRestaurantsPage from "@/pages/admin-restaurants";
 import RestaurantDashboard from "@/pages/restaurant-dashboard";
 import CustomerApp from "@/pages/customer-app";
 
@@ -48,11 +49,16 @@ function Router() {
       <Route path="/login" component={Login} />
   <Route path="/register" component={Register} />
       
-      <Route path="/admin">
+      <Route path="/admin" component={() => (
         <ProtectedRoute allowedRoles={['admin']}>
           <AdminDashboard />
         </ProtectedRoute>
-      </Route>
+      )} />
+      <Route path="/admin/restaurants" component={() => (
+        <ProtectedRoute allowedRoles={['admin']}>
+          <AdminRestaurantsPage />
+        </ProtectedRoute>
+      )} />
       
       <Route path="/restaurant">
         <ProtectedRoute allowedRoles={['admin', 'restaurant_manager']}>

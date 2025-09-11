@@ -1,4 +1,8 @@
 import { useState } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { toast } from "@/hooks/use-toast";
+import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { getAuthHeaders } from "@/lib/auth";
 import Sidebar from "@/components/layout/sidebar";
@@ -7,31 +11,53 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Users, Calendar, DollarSign } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function AdminDashboard() {
   const [selectedDate] = useState(new Date());
+  const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const [manageRestaurantId, setManageRestaurantId] = useState<string | null>(null);
   
   const { data: restaurants = [] } = useQuery({
     queryKey: ['/api/restaurants'],
     queryFn: async () => {
-      const response = await fetch('/api/restaurants', {
-        headers: getAuthHeaders()
-      });
+    const response = await fetch('/api/restaurants', { headers: getAuthHeaders() as Record<string,string> });
       if (!response.ok) throw new Error('Failed to fetch restaurants');
       return response.json();
     }
   });
 
+  const [roleFilter, setRoleFilter] = useState<string>('all');
   const { data: users = [] } = useQuery({
-    queryKey: ['/api/users'],
+    queryKey: ['/api/users', roleFilter],
     queryFn: async () => {
-      const response = await fetch('/api/users', {
-        headers: getAuthHeaders()
-      });
+    const url = roleFilter === 'all' ? '/api/users' : `/api/users?role=${roleFilter}`;
+    const response = await fetch(url, { headers: getAuthHeaders() as Record<string,string> });
       if (!response.ok) throw new Error('Failed to fetch users');
       return response.json();
     }
   });
+
+  const updateUserMutation = useMutation({
+    mutationFn: async ({ id, restaurantId }: { id: string; restaurantId: string | null }) => {
+      const res = await fetch(`/api/users/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(getAuthHeaders() as Record<string,string>) },
+        body: JSON.stringify({ restaurantId })
+      });
+      if (!res.ok) throw new Error('Failed to update user');
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['/api/users'] });
+      toast({ title: 'Сохранено' });
+    },
+    onError: (e: any) => toast({ title: 'Ошибка', description: e.message })
+  });
+
+  const managers = users.filter((u: any) => u.role === 'restaurant_manager');
+  const activeRestaurant = (restaurants as any[]).find(r => r.id === manageRestaurantId);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -116,7 +142,7 @@ export default function AdminDashboard() {
                   <CardTitle>Управление ресторанами</CardTitle>
                   <CardDescription>Список всех ресторанов в системе</CardDescription>
                 </div>
-                <Button data-testid="button-add-restaurant">
+                <Button data-testid="button-add-restaurant" onClick={() => navigate('/admin/restaurants?create=1')}>
                   Добавить ресторан
                 </Button>
               </div>
@@ -148,7 +174,7 @@ export default function AdminDashboard() {
                         <Badge variant={restaurant.isActive ? "default" : "secondary"}>
                           {restaurant.isActive ? "Активный" : "Неактивный"}
                         </Badge>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => setManageRestaurantId(restaurant.id)}>
                           Управление
                         </Button>
                       </div>
@@ -162,21 +188,41 @@ export default function AdminDashboard() {
           {/* Users Management */}
           <Card data-testid="card-users-list">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <div>
+              <div className="flex items-center justify-between gap-4 flex-wrap">
+                <div className="space-y-1">
                   <CardTitle>Управление пользователями</CardTitle>
                   <CardDescription>Список всех пользователей системы</CardDescription>
                 </div>
-                <Button data-testid="button-add-user">
-                  Добавить пользователя
-                </Button>
+                <div className="flex items-center gap-3 flex-wrap">
+                  <div className="w-48">
+                    <Select value={roleFilter} onValueChange={setRoleFilter}>
+                      <SelectTrigger data-testid="select-role-filter" className="h-9">
+                        <SelectValue placeholder="Роль" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="all">Все роли</SelectItem>
+                        <SelectItem value="admin">Администраторы</SelectItem>
+                        <SelectItem value="restaurant_manager">Менеджеры</SelectItem>
+                        <SelectItem value="customer">Клиенты</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {roleFilter !== 'all' && (
+                    <Button variant="ghost" size="sm" onClick={() => setRoleFilter('all')} data-testid="btn-reset-role-filter">
+                      Сбросить фильтр
+                    </Button>
+                  )}
+                  <Button data-testid="button-add-user">
+                    Добавить пользователя
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
               {users.length === 0 ? (
                 <div className="text-center py-8" data-testid="empty-users">
                   <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                  <p className="text-muted-foreground">Пользователи не найдены</p>
+                  <p className="text-muted-foreground">{roleFilter==='all' ? 'Пользователи не найдены' : 'Нет пользователей выбранной роли'}</p>
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -217,6 +263,48 @@ export default function AdminDashboard() {
           </Card>
         </div>
       </main>
+
+      <Dialog open={!!manageRestaurantId} onOpenChange={(o)=> !o && setManageRestaurantId(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Назначение менеджеров {activeRestaurant ? `– ${activeRestaurant.name}` : ''}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 max-h-[60vh] overflow-y-auto" data-testid="dialog-managers">
+            {managers.length === 0 && (
+              <p className="text-sm text-muted-foreground">Нет пользователей с ролью менеджер.</p>
+            )}
+            {managers.map((m: any) => {
+              const assigned = m.restaurantId === manageRestaurantId;
+              return (
+                <div key={m.id} className="flex items-center justify-between p-3 border rounded-md">
+                  <div>
+                    <p className="font-medium">{m.firstName} {m.lastName}</p>
+                    <p className="text-xs text-muted-foreground">{m.email}</p>
+                    {m.restaurantId && !assigned && (
+                      <p className="text-xs text-amber-600 mt-1">Уже привязан к другому ресторану</p>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {assigned && <Badge variant="default">Назначен</Badge>}
+                    <Button
+                      size="sm"
+                      variant={assigned ? 'destructive' : 'outline'}
+                      disabled={updateUserMutation.isPending}
+                      onClick={() => updateUserMutation.mutate({ id: m.id, restaurantId: assigned ? null : manageRestaurantId })}
+                      data-testid={`btn-toggle-manager-${m.id}`}
+                    >
+                      {assigned ? 'Снять' : (m.restaurantId && m.restaurantId !== manageRestaurantId ? 'Переназначить' : 'Назначить')}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex justify-end pt-4">
+            <Button variant="outline" size="sm" onClick={()=> setManageRestaurantId(null)}>Закрыть</Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -13,6 +13,7 @@ export interface IStorage {
   getUser(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
   getUsers(): Promise<User[]>;
+  getUsersByRole(role: string): Promise<User[]>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
   deleteUser(id: string): Promise<void>;
@@ -83,6 +84,12 @@ export class DatabaseStorage implements IStorage {
 
   async getUsers(): Promise<User[]> {
     return db.select().from(users);
+  }
+
+  async getUsersByRole(role: string): Promise<User[]> {
+    const allowed = ['admin','restaurant_manager','customer'];
+    if (!allowed.includes(role)) return [];
+    return db.select().from(users).where(eq(users.role, role as any));
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {
