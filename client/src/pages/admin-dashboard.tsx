@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Building2, Users, Calendar, DollarSign } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { UserEditDialog } from "@/components/admin/user-edit-dialog";
+import { UserCreateDialog } from "@/components/admin/user-create-dialog";
 
 export default function AdminDashboard() {
   const [selectedDate] = useState(new Date());
@@ -58,6 +60,10 @@ export default function AdminDashboard() {
 
   const managers = users.filter((u: any) => u.role === 'restaurant_manager');
   const activeRestaurant = (restaurants as any[]).find(r => r.id === manageRestaurantId);
+
+  // User edit state
+  const [editingUser, setEditingUser] = useState<any | null>(null);
+  const [createOpen, setCreateOpen] = useState(false);
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -212,7 +218,7 @@ export default function AdminDashboard() {
                       Сбросить фильтр
                     </Button>
                   )}
-                  <Button data-testid="button-add-user">
+                  <Button data-testid="button-add-user" onClick={()=> setCreateOpen(true)}>
                     Добавить пользователя
                   </Button>
                 </div>
@@ -251,7 +257,7 @@ export default function AdminDashboard() {
                         <Badge variant={user.isActive ? "default" : "secondary"}>
                           {user.isActive ? "Активный" : "Неактивный"}
                         </Badge>
-                        <Button variant="outline" size="sm">
+                        <Button variant="outline" size="sm" onClick={() => setEditingUser(user)} data-testid={`btn-edit-user-${user.id}`}>
                           Редактировать
                         </Button>
                       </div>
@@ -305,6 +311,9 @@ export default function AdminDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+  <UserEditDialog user={editingUser} restaurants={restaurants} onClose={() => setEditingUser(null)} />
+  <UserCreateDialog open={createOpen} restaurants={restaurants} onClose={()=> setCreateOpen(false)} />
     </div>
   );
 }

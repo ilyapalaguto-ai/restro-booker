@@ -88,8 +88,8 @@ export class DatabaseStorage implements IStorage {
 
   async getUsersByRole(role: string): Promise<User[]> {
     const allowed = ['admin','restaurant_manager','customer'];
-    if (!allowed.includes(role)) return [];
-    return db.select().from(users).where(eq(users.role, role as any));
+  if (!allowed.includes(role)) return [];
+  return db.select().from(users).where(eq(users.role, role as any));
   }
 
   async createUser(insertUser: InsertUser): Promise<User> {

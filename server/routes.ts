@@ -466,6 +466,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.status(500).json({ message: 'Internal server error' });
     }
   });
+  
+  // Create user (admin only)
+  app.post("/api/users", authenticateToken, requireRole(['admin']), async (req, res) => {
+    try {
+      const createUserSchema = z.object({
+        email: z.string().email(),
+        phone: z.string().regex(/^[0-9+()\-\s]{5,20}$/i, 'Invalid phone').optional(),
+        firstName: z.string().min(1),
+        lastName: z.string().min(1),
+        role: z.enum(['admin','restaurant_manager','customer']).default('customer'),
+        isActive: z.boolean().optional().default(true),
+        restaurantId: z.string().min(1).optional().or(z.null()),
+        password: z.string().min(6),
+      }).strict();
+
+      const data = createUserSchema.parse(req.body);
+
+      // Normalize empty restaurantId
+      if ((data as any).restaurantId === "") {
+        (data as any).restaurantId = null;
+      }
+
+      // Check uniqueness
+      const existing = await storage.getUserByEmail(data.email);
+      if (existing) {
+        return res.status(400).json({ message: 'Email already in use' });
+      }
+
+      const user = await storage.createUser(data as any);
+      const { password: _pw, ...userWithoutPassword } = user;
+      res.status(201).json(userWithoutPassword);
+    } catch (error) {
+      if (error instanceof ZodError) {
+        return res.status(400).json({ message: 'Invalid input data', errors: error.errors });
+      }
+      res.status(500).json({ message: 'Internal server error' });
+    }
+  });
 
   // Update user (admin only) - for assigning managers to restaurants, etc.
   app.put("/api/users/:id", authenticateToken, requireRole(['admin']), async (req, res) => {
