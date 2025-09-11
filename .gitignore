@@ -5,6 +5,6 @@ server/public
 vite.config.ts.*
 *.tar.gz
 .env
-.github
-.devcontainer
-scripts
+.github/
+.devcontainer/
+scripts/

@@ -9,5 +9,7 @@ COPY package.json package-lock.json ./
 # Устанавливаем зависимости
 RUN npm install
 
-# Копируем исходники
 COPY . .
+
+# Удаляем node_modules и пересобираем зависимости под Linux
+RUN rm -rf node_modules && npm install

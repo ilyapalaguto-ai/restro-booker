@@ -14,12 +14,15 @@ services:
     build:
       context: ..
       dockerfile: .devcontainer/Dockerfile
-    command: sh -c "chmod +x scripts/start-dev.sh && scripts/start-dev.sh"
+    command: bash /workspace/scripts/start-dev.sh
+    #command: sh -c "ls -l /workspace/scripts && chmod +x /workspace/scripts/start-dev.sh && /workspace/scripts/start-dev.sh"
     ports:
       - "3000:3000"
       - "5173:5173"
+      - "5000:5000"
     volumes:
       - ..:/workspace:cached
+      - /workspace/node_modules
     environment:
       DATABASE_URL: postgres://postgres:postgres@db:5432/restro_booker
     depends_on:
